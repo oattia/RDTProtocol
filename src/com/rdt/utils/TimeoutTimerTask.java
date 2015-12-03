@@ -1,27 +1,17 @@
-package com.rdt;
-
-import com.rdt.utils.Event;
-import com.rdt.utils.Publisher;
-import com.rdt.utils.Subscriber;
+package com.rdt.utils;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.TimerTask;
 
-public abstract class TransmissionStrategy implements Publisher {
+public class TimeoutTimerTask extends TimerTask implements Publisher {
 
     private Set<Subscriber> subscribers = new HashSet<>();
+    private long seqNo;
 
-    abstract boolean isDone();
-
-    abstract void sent(long seqNo);
-
-    abstract void acknowledged(long seqNo);
-
-    abstract void timedout(long seqNo);
-
-    abstract long getNextSeqNo();
-
-    abstract int[] getWindow();
+    public TimeoutTimerTask(long seqNo){
+        this.seqNo = seqNo;
+    }
 
     @Override
     public void publish(Event e) {
@@ -38,5 +28,10 @@ public abstract class TransmissionStrategy implements Publisher {
     @Override
     public void unsubscribe(Subscriber s) {
         subscribers.remove(s);
+    }
+
+    @Override
+    public void run() {
+        publish(new TimeoutEvent(seqNo));
     }
 }

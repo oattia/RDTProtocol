@@ -1,9 +1,8 @@
 package com.rdt;
 
-public class StopAndWaitStrategy extends TransmissionStrategy {
-
+public class GoBackNStrategy extends TransmissionStrategy {
     @Override
-    public boolean isDone() {
+    boolean isDone() {
         return false;
     }
 
@@ -13,7 +12,7 @@ public class StopAndWaitStrategy extends TransmissionStrategy {
     }
 
     @Override
-    public void acknowledged(long seqNo) {
+    void acknowledged(long seqNo) {
 
     }
 
@@ -23,12 +22,12 @@ public class StopAndWaitStrategy extends TransmissionStrategy {
     }
 
     @Override
-    public long getNextSeqNo() {
+    long getNextSeqNo() {
         return 0;
     }
 
     @Override
-    public int[] getWindow() {
+    int[] getWindow() {
         return new int[0];
     }
 }

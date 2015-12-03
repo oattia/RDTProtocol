@@ -8,4 +8,8 @@ public abstract class Packet {
     protected int checkSum; // Should be 16 bit only
     protected int length;   // Should be 16 bit only
 
+    public DatagramPacket getDatagramPacket(){
+        return datagram;
+    }
+
 }

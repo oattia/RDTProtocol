@@ -4,24 +4,19 @@ import com.rdt.utils.Event;
 import com.rdt.utils.Publisher;
 import com.rdt.utils.Subscriber;
 
+import java.net.DatagramSocket;
 import java.util.HashSet;
 import java.util.Set;
 
-public abstract class TransmissionStrategy implements Publisher {
+public class SocketListener implements Runnable, Publisher {
+
+    private DatagramSocket socket;
 
     private Set<Subscriber> subscribers = new HashSet<>();
 
-    abstract boolean isDone();
-
-    abstract void sent(long seqNo);
-
-    abstract void acknowledged(long seqNo);
-
-    abstract void timedout(long seqNo);
-
-    abstract long getNextSeqNo();
-
-    abstract int[] getWindow();
+    public SocketListener(DatagramSocket socket){
+        this.socket = socket;
+    }
 
     @Override
     public void publish(Event e) {
@@ -38,5 +33,10 @@ public abstract class TransmissionStrategy implements Publisher {
     @Override
     public void unsubscribe(Subscriber s) {
         subscribers.remove(s);
+    }
+
+    @Override
+    public void run() {
+
     }
 }
