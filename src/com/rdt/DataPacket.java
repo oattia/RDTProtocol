@@ -1,7 +1,6 @@
 package com.rdt;
 
 import java.net.DatagramPacket;
-import java.util.Arrays;
 
 public class DataPacket extends Packet {
 

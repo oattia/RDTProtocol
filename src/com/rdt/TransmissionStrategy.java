@@ -1,13 +1,11 @@
 package com.rdt;
 
-import com.rdt.utils.Event;
-import com.rdt.utils.Publisher;
 import com.rdt.utils.Subscriber;
 
 import java.util.HashSet;
 import java.util.Set;
 
-public abstract class TransmissionStrategy implements Publisher {
+public abstract class TransmissionStrategy {
 
     int numOfPackets;
     int initSeqNo;
@@ -42,22 +40,5 @@ public abstract class TransmissionStrategy implements Publisher {
     public int[] getWindow(){
         int [] w = {windowStart, windowEnd};
         return w;
-    }
-
-    @Override
-    public void publish(Event e) {
-        for(Subscriber s : subscribers) {
-            s.update(e);
-        }
-    }
-
-    @Override
-    public void subscribe(Subscriber s) {
-        subscribers.add(s);
-    }
-
-    @Override
-    public void unsubscribe(Subscriber s) {
-        subscribers.remove(s);
     }
 }

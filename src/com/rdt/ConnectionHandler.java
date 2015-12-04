@@ -32,17 +32,18 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
     private String strategyName;
     private String fileName;
-
+    private int windowSize;
 
     public ConnectionHandler(String strategyName, String fileName,
-                             float plp, float pep, long seed){
+                             float plp, float pep, long seed, int windowSize){
 
         this.strategyName = strategyName;
         this.fileName = fileName;
 
         this.plp = plp;
         this.pep = pep;
-        randomGenerator = new Random(seed);
+        this.randomGenerator = new Random(seed);
+        this.windowSize = windowSize;
     }
 
     public boolean init(){
@@ -55,25 +56,26 @@ public class ConnectionHandler implements Runnable, Subscriber {
             return false;
         }
 
-        if (strategyName == null){
+        int numOfChunx = (int)Math.ceil(file.length() / CHUNK_SIZE);
+        int initialSeqNo = randomGenerator.nextInt(1000);
+
+        if (strategyName == null) {
             throw new IllegalArgumentException();
         } else if(strategyName.equalsIgnoreCase("StopAndWait")){
-            strategy = new StopAndWaitStrategy((int)Math.ceil(file.length() / CHUNK_SIZE), randomGenerator.nextInt(1000));
+            strategy = new StopAndWaitStrategy(numOfChunx, initialSeqNo);
         }else if (strategyName.equalsIgnoreCase("SelectiveRepeat")){
-            strategy = new SelectiveRepeatStrategy();
+            strategy = new SelectiveRepeatStrategy(numOfChunx, initialSeqNo, windowSize);
         } else if (strategyName.equalsIgnoreCase("GoBackN")) {
-            strategy = new GoBackNStrategy();
+            strategy = new GoBackNStrategy(numOfChunx, initialSeqNo, windowSize);
         } else {
             throw new IllegalArgumentException();
         }
-        strategy.subscribe(this);
 
         try {
             socket = new DatagramSocket();
         } catch (SocketException e) {
             // TODO
         }
-
 
         mailbox = new LinkedBlockingQueue<>();
         timeoutMap = new HashMap<>();
@@ -176,6 +178,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
         TimeoutTimerTask ttt = new TimeoutTimerTask(seqNo);
         ttt.subscribe(this);
         timeoutMap.put(seqNo, ttt);
+        //TODO: calculate dynamic timeout
         timer.schedule(ttt, 10L);
     }
 

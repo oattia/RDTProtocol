@@ -1,6 +1,10 @@
 package com.rdt;
 
 public class GoBackNStrategy extends TransmissionStrategy {
+    public GoBackNStrategy(int numOfPackets, int initSeqNo, int initWindowSize) {
+        super(numOfPackets, initSeqNo, initWindowSize);
+    }
+
     @Override
     boolean isDone() {
         return false;
@@ -26,8 +30,4 @@ public class GoBackNStrategy extends TransmissionStrategy {
         return 0;
     }
 
-    @Override
-    int[] getWindow() {
-        return new int[0];
-    }
 }

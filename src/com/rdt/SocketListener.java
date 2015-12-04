@@ -8,6 +8,7 @@ import com.rdt.utils.Subscriber;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.SocketException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -54,7 +55,7 @@ public class SocketListener implements Runnable, Publisher {
                 AckEvent ackE = new AckEvent(dtgrm);
                 publish(ackE);
             } catch (IOException e) {
-                // TODO
+               continue;
             }
 
             try {
