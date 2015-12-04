@@ -30,13 +30,35 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private float plp = 0.05f;         // packet loss probability: from 0 to 100
     private float pep = 0.05f;         // packet error probability: from 0 to 100
 
+    private String strategyName;
+    private String fileName;
+
+
     public ConnectionHandler(String strategyName, String fileName,
                              float plp, float pep, long seed){
+
+        this.strategyName = strategyName;
+        this.fileName = fileName;
+
+        this.plp = plp;
+        this.pep = pep;
+        randomGenerator = new Random(seed);
+    }
+
+    public boolean init(){
+        File file;
+        try {
+            file = new File(fileName);
+            fileStream = new FileInputStream(file);
+        }catch(FileNotFoundException e) {
+            sendNotFoundPacket();
+            return false;
+        }
 
         if (strategyName == null){
             throw new IllegalArgumentException();
         } else if(strategyName.equalsIgnoreCase("StopAndWait")){
-            strategy = new StopAndWaitStrategy();
+            strategy = new StopAndWaitStrategy((int)Math.ceil(file.length() / CHUNK_SIZE), randomGenerator.nextInt(1000));
         }else if (strategyName.equalsIgnoreCase("SelectiveRepeat")){
             strategy = new SelectiveRepeatStrategy();
         } else if (strategyName.equalsIgnoreCase("GoBackN")) {
@@ -52,11 +74,6 @@ public class ConnectionHandler implements Runnable, Subscriber {
             // TODO
         }
 
-        try {
-            fileStream = new FileInputStream(new File(fileName));
-        }catch(FileNotFoundException e){
-            fileStream = null;
-        }
 
         mailbox = new LinkedBlockingQueue<>();
         timeoutMap = new HashMap<>();
@@ -66,18 +83,13 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
         socketListenerThread = new Thread(socketListener);
         socketListenerThread.start();
-
-        this.plp = plp;
-        this.pep = pep;
-        randomGenerator = new Random(seed);
+        return true;
     }
 
     @Override
     public void run() {
-        if( fileStream == null ){
-            sendNotFoundPacket();
+        if( !init() )
             return;
-        }
 
         while(!strategy.isDone()) {
             long seqNo = strategy.getNextSeqNo();

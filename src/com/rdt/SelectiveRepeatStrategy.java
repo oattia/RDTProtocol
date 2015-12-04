@@ -2,6 +2,10 @@ package com.rdt;
 
 public class SelectiveRepeatStrategy extends TransmissionStrategy {
 
+    public SelectiveRepeatStrategy(int numOfPackets, int initSeqNo, int initWindowSize) {
+        super(numOfPackets, initSeqNo, initWindowSize);
+    }
+
     @Override
     public boolean isDone() {
         return false;
@@ -27,8 +31,4 @@ public class SelectiveRepeatStrategy extends TransmissionStrategy {
         return 0;
     }
 
-    @Override
-    public int[] getWindow() {
-        return new int[0];
-    }
 }

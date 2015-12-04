@@ -9,6 +9,24 @@ import java.util.Set;
 
 public abstract class TransmissionStrategy implements Publisher {
 
+    int numOfPackets;
+    int initSeqNo;
+    int windowSize;
+    long nextPacketToSend;
+
+    int windowStart;
+    int windowEnd;
+
+    public TransmissionStrategy(int numOfPackets, int initSeqNo, int initWindowSize){
+        this.numOfPackets = numOfPackets;
+        this.initSeqNo = initSeqNo;
+        this.windowSize = initWindowSize;
+
+        nextPacketToSend = 1;
+        windowStart = 1;
+        windowEnd = windowStart+windowSize;
+    }
+
     private Set<Subscriber> subscribers = new HashSet<>();
 
     abstract boolean isDone();
@@ -21,7 +39,10 @@ public abstract class TransmissionStrategy implements Publisher {
 
     abstract long getNextSeqNo();
 
-    abstract int[] getWindow();
+    public int[] getWindow(){
+        int [] w = {windowStart, windowEnd};
+        return w;
+    }
 
     @Override
     public void publish(Event e) {
