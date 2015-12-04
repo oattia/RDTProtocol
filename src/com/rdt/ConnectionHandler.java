@@ -148,13 +148,13 @@ public class ConnectionHandler implements Runnable, Subscriber {
             if( randomGenerator.nextFloat() < plp )
                 return;
             if( randomGenerator.nextFloat() < pep ) {
-                byte[] data = pkt.getDatagramPacket().getData();
+                byte[] data = pkt.createDatagramPacket().getData();
                 int bitWithError = randomGenerator.nextInt(8*data.length);
                 data[(int)(bitWithError/8)] ^= (1<<(bitWithError%8));
-                pkt.getDatagramPacket().setData(data);
+                pkt.createDatagramPacket().setData(data);
             }
 
-            socket.send(pkt.getDatagramPacket());
+            socket.send(pkt.createDatagramPacket());
             strategy.sent(pkt.getSeqNo());
         } catch (IOException e){
             //TODO
