@@ -8,9 +8,12 @@ public class TimeoutTimerTask extends TimerTask implements Publisher {
 
     private Set<Subscriber> subscribers = new HashSet<>();
     private long seqNo;
+    private long timestamp;
+    private long delay;
 
-    public TimeoutTimerTask(long seqNo){
+    public TimeoutTimerTask(long seqNo, long timestamp, long delay){
         this.seqNo = seqNo;
+        this.timestamp = timestamp;
     }
 
     @Override

@@ -17,10 +17,12 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private BlockingQueue<Event> mailbox;
     private TransmissionStrategy strategy;
     private DatagramSocket socket;
+
     private SocketListener socketListener;
     private Thread socketListenerThread;
+
     private FileInputStream fileStream;
-    private Map<Long, TimerTask> timeoutMap;
+    private Map<Long, TimeoutTimerTask> timeoutMap;
     private Random randomGenerator;
 
     private static final Timer timer = new Timer(true);
@@ -34,8 +36,15 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private String fileName;
     private int windowSize;
 
+    private float estimatedRtt;
+    private float devRtt;
+    private int timeoutInterval = 1000; // In milliseconds
+
+    private static final float ALPHA = 0.125f;
+    private static final float BETA = 0.25f;
+
     public ConnectionHandler(String strategyName, String fileName,
-                             float plp, float pep, long seed, int windowSize){
+                             float plp, float pep, long seed, int windowSize) {
 
         this.strategyName = strategyName;
         this.fileName = fileName;
@@ -46,7 +55,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
         this.windowSize = windowSize;
     }
 
-    public boolean init(){
+    private boolean init() {
         File file;
         try {
             file = new File(fileName);
@@ -61,11 +70,11 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
         if (strategyName == null) {
             throw new IllegalArgumentException();
-        } else if(strategyName.equalsIgnoreCase("StopAndWait")){
+        } else if(strategyName.equalsIgnoreCase(TransmissionStrategy.STOP_AND_WAIT)){
             strategy = new StopAndWaitStrategy(numOfChunx, initialSeqNo);
-        }else if (strategyName.equalsIgnoreCase("SelectiveRepeat")){
+        } else if (strategyName.equalsIgnoreCase(TransmissionStrategy.SELECTIVE_REPEAT)){
             strategy = new SelectiveRepeatStrategy(numOfChunx, initialSeqNo, windowSize);
-        } else if (strategyName.equalsIgnoreCase("GoBackN")) {
+        } else if (strategyName.equalsIgnoreCase(TransmissionStrategy.GO_BACK_N)) {
             strategy = new GoBackNStrategy(numOfChunx, initialSeqNo, windowSize);
         } else {
             throw new IllegalArgumentException();
@@ -90,7 +99,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
     @Override
     public void run() {
-        if( !init() )
+        if(!init())
             return;
 
         while(!strategy.isDone()) {
@@ -134,27 +143,25 @@ public class ConnectionHandler implements Runnable, Subscriber {
         int actualLen;
         try {
             actualLen = fileStream.read(data);
-        }catch(IOException e){
+        } catch(IOException e) {
             return null;
         }
-
-        DataPacket packet = new DataPacket(data, actualLen, seqNo);
-        return packet;
+        return new DataPacket(data, actualLen, seqNo);
     }
 
-    // TODO: simulate packet loss.
     private void sendDataPacket(DataPacket pkt) {
         try {
-            if( randomGenerator.nextFloat() < plp )
-                return;
-            if( randomGenerator.nextFloat() < pep ) {
+
+            if(randomGenerator.nextFloat() < pep) {
                 byte[] data = pkt.getDatagramPacket().getData();
                 int bitWithError = randomGenerator.nextInt(8*data.length);
-                data[(int)(bitWithError/8)] ^= (1<<(bitWithError%8));
+                data[(bitWithError / 8)] ^= (1 << (bitWithError % 8));
                 pkt.getDatagramPacket().setData(data);
             }
 
-            socket.send(pkt.getDatagramPacket());
+            if(randomGenerator.nextFloat() >= plp)
+                socket.send(pkt.getDatagramPacket());
+
             strategy.sent(pkt.getSeqNo());
         } catch (IOException e){
             //TODO
@@ -163,7 +170,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
     private void handleAckEvent(AckEvent e) {
         long seqNo = e.getAckNo();
-        TimerTask ttt = timeoutMap.remove(seqNo);
+        TimeoutTimerTask ttt = timeoutMap.remove(seqNo);
         if(ttt != null) ttt.cancel();
         strategy.acknowledged(seqNo);
     }
@@ -172,23 +179,21 @@ public class ConnectionHandler implements Runnable, Subscriber {
         long seqNo = e.getSeqNo();
         timeoutMap.remove(seqNo);
         strategy.timedout(seqNo);
+        timeoutInterval *= 2;
     }
 
     private void setTimer(long seqNo) {
-        TimeoutTimerTask ttt = new TimeoutTimerTask(seqNo);
+        timeoutInterval = (int) Math.ceil(estimatedRtt + 4 * devRtt);
+        TimeoutTimerTask ttt = new TimeoutTimerTask(seqNo, System.currentTimeMillis(), timeoutInterval);
         ttt.subscribe(this);
         timeoutMap.put(seqNo, ttt);
-        //TODO: calculate dynamic timeout
-        timer.schedule(ttt, 10L);
+        timer.schedule(ttt, timeoutInterval);
     }
 
     @Override
     public void update(Event e) {
         if(e instanceof AckEvent || e instanceof TimeoutEvent) {
             mailbox.offer(e);
-        } else {
-            // TODO
-            return;
         }
     }
 }

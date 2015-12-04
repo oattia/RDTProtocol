@@ -1,19 +1,19 @@
 package com.rdt;
 
-import com.rdt.utils.Subscriber;
-
-import java.util.HashSet;
-import java.util.Set;
-
 public abstract class TransmissionStrategy {
 
-    int numOfPackets;
-    int initSeqNo;
-    int windowSize;
-    long nextPacketToSend;
+    protected int numOfPackets;
+    protected int initSeqNo;
+    protected int windowSize;
+    protected long nextPacketToSend;
 
-    int windowStart;
-    int windowEnd;
+    protected int windowStart;
+    protected int windowEnd;
+
+    public static final String STOP_AND_WAIT = "StopAndWait";
+    public static final String GO_BACK_N = "GoBackN";
+    public static final String SELECTIVE_REPEAT = "SelectiveRepeat";
+
 
     public TransmissionStrategy(int numOfPackets, int initSeqNo, int initWindowSize){
         this.numOfPackets = numOfPackets;
@@ -24,8 +24,6 @@ public abstract class TransmissionStrategy {
         windowStart = 1;
         windowEnd = windowStart+windowSize;
     }
-
-    private Set<Subscriber> subscribers = new HashSet<>();
 
     abstract boolean isDone();
 
