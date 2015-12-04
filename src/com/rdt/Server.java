@@ -1,6 +1,8 @@
 package com.rdt;
 
+import java.io.BufferedReader;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -10,42 +12,6 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class Server {
-    public static class ServerConfig {
-        private int port;
-        private int maxN;
-        private long rngSeed;
-        private float plp;
-        private String strategy;
-
-        public static ServerConfig parseConfigFile(String fileName) {
-            try {
-                FileInputStream fis = new FileInputStream(fileName);
-            } catch (IOException e) {
-
-            }
-            return null;
-        }
-
-        public int getPort() {
-            return port;
-        }
-
-        public int getMaxN() {
-            return maxN;
-        }
-
-        public long getRngSeed() {
-            return rngSeed;
-        }
-
-        public float getPlp() {
-            return plp;
-        }
-
-        public String getStrategy() {
-            return strategy;
-        }
-    }
 
     private static class Worker {
         private Thread thread;
