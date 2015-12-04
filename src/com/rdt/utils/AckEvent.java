@@ -1,9 +1,18 @@
 package com.rdt.utils;
 
-public class AckEvent implements Event {
-    private long seqNo;
+import com.rdt.AckPacket;
 
-    public long getSeqNo() {
-        return seqNo;
+import java.net.DatagramPacket;
+
+public class AckEvent implements Event {
+
+    private AckPacket pkt;
+
+    public AckEvent(DatagramPacket ackPkt) {
+        pkt = new AckPacket(ackPkt);
+    }
+
+    public long getAckNo() {
+        return pkt.getAckNo();
     }
 }
