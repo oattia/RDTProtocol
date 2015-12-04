@@ -148,10 +148,10 @@ public class ConnectionHandler implements Runnable, Subscriber {
             if( randomGenerator.nextFloat() < plp )
                 return;
             if( randomGenerator.nextFloat() < pep ) {
-                byte[] data = pkt.createDatagramPacket().getData();
+                byte[] data = pkt.getChunkData();
                 int bitWithError = randomGenerator.nextInt(8*data.length);
                 data[(int)(bitWithError/8)] ^= (1<<(bitWithError%8));
-                pkt.createDatagramPacket().setData(data);
+                pkt.setChunkData(data);
             }
 
             socket.send(pkt.createDatagramPacket());

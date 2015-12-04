@@ -11,4 +11,11 @@ public abstract class Packet {
 
     public abstract DatagramPacket createDatagramPacket();
 
+    public byte[] getChunkData() {
+        return chunkData;
+    }
+
+    public void setChunkData(byte[] chunkData) {
+        this.chunkData = chunkData;
+    }
 }
