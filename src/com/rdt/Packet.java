@@ -4,6 +4,21 @@ import java.net.DatagramPacket;
 
 public abstract class Packet {
 
+    /*
+    * Packet structure is as follows:
+    *
+    * ===========================================================
+    *   CHECKSUM                |   pos: 0, len: 2
+    *   CHUNCK_LENGTH           |   pos: 2, len: 4
+    *   SEQ_NO                  |   pos: 6, len: 4
+    *   Rest of header (empty)  |   pos: 10, len: PACKET_HEADER_SIZE-10
+    * -----------------------------------------------------------
+    *   chunckData              |   pos: PACKET_HEADER_SIZE, len: chunkLength
+    * ===========================================================
+    *
+    * */
+
+
     // offsets in byte array of packet
     protected static final int POS_CHECKSUM = 0;
     protected static final int POS_LENGTH = 2;
