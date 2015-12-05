@@ -46,9 +46,6 @@ public abstract class Packet {
     public Packet() {    }
 
 
-    public abstract DatagramPacket createDatagramPacket();
-
-
     public Packet(DatagramPacket packet){
         byte[] data = packet.getData();
 
@@ -72,6 +69,27 @@ public abstract class Packet {
 
         checkSum = computeChecksum(data, 2, PACKET_HEADER_SIZE + chunkLength);
         isCorrupted = (checkSum == getInt(receivedChecksum) );
+    }
+
+
+    public DatagramPacket createDatagramPacket() {
+        byte[] packetData = new byte[chunkLength + PACKET_HEADER_SIZE];
+
+        byte[] actualLenBytes = getBytes(chunkLength);
+        System.arraycopy(actualLenBytes, 0, packetData, POS_LENGTH, 4);
+
+        byte[] seqNoBytes = getBytes(seqNo);
+        System.arraycopy(seqNoBytes, 0, packetData, POS_SEQ_NO, 4);
+
+        System.arraycopy(chunkData, 0, packetData, PACKET_HEADER_SIZE, chunkLength);
+
+        byte[] packetTypeBytes = getBytes(packetType);
+        System.arraycopy(packetTypeBytes, 0, packetData, POS_PACKET_TYPE, 4);
+
+        checkSum = computeChecksum(packetData, 2, PACKET_HEADER_SIZE + chunkLength);
+        System.arraycopy(getBytes(checkSum), 0, packetData, POS_CHECKSUM, 2);
+
+        return new DatagramPacket(packetData, packetData.length);
     }
 
 
