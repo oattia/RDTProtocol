@@ -4,10 +4,9 @@ import java.net.DatagramPacket;
 
 public class DataPacket extends Packet {
 
-    protected long seqNo; // Should be 32 bit only
-
 
     public DataPacket(byte[] chunkData, int actualLen, long seqNo){
+        this.packetType = T_DATA;
         this.chunkData = chunkData;
         this.chunkLength = actualLen;
         this.seqNo = seqNo;
@@ -15,33 +14,9 @@ public class DataPacket extends Packet {
     }
 
 
-    public DataPacket(DatagramPacket packet){
-        byte[] data = packet.getData();
-
-        byte[] actualLenBytes = new byte[4];
-        System.arraycopy(data, POS_LENGTH, actualLenBytes, 0,  4);
-        chunkLength = getInt(actualLenBytes);
-
-        chunkData = new byte[chunkLength];
-        System.arraycopy(data, PACKET_HEADER_SIZE, chunkData, 0, chunkLength);
-
-        byte[] seqNoBytes = new byte[4];
-        System.arraycopy(data, POS_SEQ_NO, seqNoBytes, 0, 4);
-        seqNo = getInt(seqNoBytes);
-
-        byte[] receivedChecksum = new byte[2];
-        System.arraycopy(chunkData, POS_CHECKSUM, receivedChecksum, 0, 2);
-
-        checkSum = computeChecksum(data, 2, PACKET_HEADER_SIZE + chunkLength);
-        isCorrupted = (checkSum == getInt(receivedChecksum) );
-    }
-
-
     @Override
     public DatagramPacket createDatagramPacket() {
         byte[] packetData = new byte[chunkLength + PACKET_HEADER_SIZE];
-
-        // first 2 bytes are reserved for checksum
 
         byte[] actualLenBytes = getBytes(chunkLength);
         System.arraycopy(actualLenBytes, 0, packetData, POS_LENGTH, 4);
@@ -50,6 +25,9 @@ public class DataPacket extends Packet {
         System.arraycopy(seqNoBytes, 0, packetData, POS_SEQ_NO, 4);
 
         System.arraycopy(chunkData, 0, packetData, PACKET_HEADER_SIZE, chunkLength);
+
+        byte[] packetTypeBytes = getBytes(packetType);
+        System.arraycopy(packetTypeBytes, 0, packetData, POS_PACKET_TYPE, 4);
 
         checkSum = computeChecksum(packetData, 2, PACKET_HEADER_SIZE + chunkLength);
         System.arraycopy(getBytes(checkSum), 0, packetData, POS_CHECKSUM, 2);

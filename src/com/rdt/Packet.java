@@ -9,6 +9,7 @@ public abstract class Packet {
     *
     * ===========================================================
     *   CHECKSUM                |   pos: 0, len: 2
+    *   PACKET_TYPE             |   pos:
     *   CHUNCK_LENGTH           |   pos: 2, len: 4
     *   SEQ_NO                  |   pos: 6, len: 4
     *   Rest of header (empty)  |   pos: 10, len: PACKET_HEADER_SIZE-10
@@ -23,6 +24,14 @@ public abstract class Packet {
     protected static final int POS_CHECKSUM = 0;
     protected static final int POS_LENGTH = 2;
     protected static final int POS_SEQ_NO = 6;
+    protected static final int POS_PACKET_TYPE = 10;
+
+    // offsets in byte array of packet
+    protected static final int T_DATA = 0;
+    protected static final int T_ACK= 1;
+    protected static final int T_FILE_NOT_FND = 2;
+    protected static final int T_REQUEST = 3;
+
 
     protected static final int PACKET_HEADER_SIZE = 20;
 
@@ -30,8 +39,41 @@ public abstract class Packet {
     protected int chunkLength;   // Should be 16 bit only
     protected boolean isCorrupted;
     protected byte[] chunkData;
+    protected int packetType;
+    protected long seqNo;
+
+
+    public Packet() {    }
+
 
     public abstract DatagramPacket createDatagramPacket();
+
+
+    public Packet(DatagramPacket packet){
+        byte[] data = packet.getData();
+
+        byte[] actualLenBytes = new byte[4];
+        System.arraycopy(data, POS_LENGTH, actualLenBytes, 0,  4);
+        chunkLength = getInt(actualLenBytes);
+
+        chunkData = new byte[chunkLength];
+        System.arraycopy(data, PACKET_HEADER_SIZE, chunkData, 0, chunkLength);
+
+        byte[] seqNoBytes = new byte[4];
+        System.arraycopy(data, POS_SEQ_NO, seqNoBytes, 0, 4);
+        seqNo = getInt(seqNoBytes);
+
+        byte[] packetTypeBytes = new byte[4];
+        System.arraycopy(data, POS_PACKET_TYPE, packetTypeBytes, 0, 4);
+        packetType = getInt(packetTypeBytes);
+
+        byte[] receivedChecksum = new byte[2];
+        System.arraycopy(chunkData, POS_CHECKSUM, receivedChecksum, 0, 2);
+
+        checkSum = computeChecksum(data, 2, PACKET_HEADER_SIZE + chunkLength);
+        isCorrupted = (checkSum == getInt(receivedChecksum) );
+    }
+
 
     public byte[] getChunkData() {
         return chunkData;
@@ -69,6 +111,10 @@ public abstract class Packet {
         return bytes;
     }
 
+    protected static byte[] getBytes(String str) {
+        return str.getBytes();
+    }
+
     protected static int getInt(byte[] bytes){
         int value=0;
         for(int i=0; i<bytes.length; i++){
@@ -87,4 +133,17 @@ public abstract class Packet {
         return value;
     }
 
+
+    protected String getString(byte[] data) {
+        return new String(data);
+    }
+
+
+    public static int getType(DatagramPacket packet){
+        byte[] data = packet.getData();
+        byte[] packetTypeBytes = new byte[4];
+        System.arraycopy(data, POS_PACKET_TYPE, packetTypeBytes, 0, 4);
+
+        return getInt(packetTypeBytes);
+    }
 }
