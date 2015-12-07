@@ -2,41 +2,45 @@ package com.rdt;
 
 public abstract class TransmissionStrategy {
 
+    // To check if done ...
     protected int numOfPackets;
-    protected int initSeqNo;
-    protected int windowSize;
-    protected long nextPacketToSend;
+    protected long initSeqNo;
 
-    protected int windowStart;
-    protected int windowEnd;
+    // Running variables
+    protected int windowSize;
+    protected long base; // first not acked.
+    protected long nextSeqNum;
+
+    // Invariants:
+    // first pkt in window = base
+    // last  pkt in window = base + windowSize - 1
 
     public static final String STOP_AND_WAIT = "StopAndWait";
     public static final String GO_BACK_N = "GoBackN";
     public static final String SELECTIVE_REPEAT = "SelectiveRepeat";
 
 
-    public TransmissionStrategy(int numOfPackets, int initSeqNo, int initWindowSize){
+    public TransmissionStrategy(int numOfPackets, long initSeqNo, int initWindowSize) {
         this.numOfPackets = numOfPackets;
         this.initSeqNo = initSeqNo;
         this.windowSize = initWindowSize;
 
-        nextPacketToSend = 1;
-        windowStart = 1;
-        windowEnd = windowStart+windowSize;
+        this.nextSeqNum = initSeqNo;
+        this.base = initSeqNo;
     }
 
-    abstract boolean isDone();
+    public abstract boolean isDone();
 
-    abstract void sent(long seqNo);
+    public abstract void sent(long seqNo);
 
-    abstract void acknowledged(long seqNo);
+    public abstract void acknowledged(long seqNo);
 
-    abstract void timedout(long seqNo);
+    public abstract void timedout(long seqNo);
 
-    abstract long getNextSeqNo();
+    public abstract long getNextSeqNo();
 
-    public int[] getWindow(){
-        int [] w = {windowStart, windowEnd};
+    public long[] getWindow() {
+        long[] w = { base, base + windowSize };
         return w;
     }
 }

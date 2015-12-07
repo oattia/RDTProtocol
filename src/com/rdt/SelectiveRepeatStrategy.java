@@ -1,34 +1,60 @@
 package com.rdt;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class SelectiveRepeatStrategy extends TransmissionStrategy {
+
+    private Set<Long> lostSeqs;
+    private Set<Long> notAcked;     // lostSeqs is subset of notAcked
 
     public SelectiveRepeatStrategy(int numOfPackets, int initSeqNo, int initWindowSize) {
         super(numOfPackets, initSeqNo, initWindowSize);
+        lostSeqs = new HashSet<>();
+        notAcked = new HashSet<>();
     }
 
     @Override
     public boolean isDone() {
-        return false;
+        return (base == (numOfPackets + initSeqNo)) && notAcked.isEmpty();
     }
 
     @Override
-    void sent(long seqNo) {
-
+    public void sent(long seqNo) {
+        if(seqNo == nextSeqNum)
+            nextSeqNum++;
+        notAcked.add(seqNo);
     }
 
     @Override
     public void acknowledged(long seqNo) {
-
+        lostSeqs.remove(seqNo);
+        notAcked.remove(seqNo);
+        if (seqNo == base) {
+            while(!notAcked.contains(base))
+                base++;
+        } else {
+            // Ack out of order ... don't slide the window
+        }
+        // Congestion logic.
     }
 
     @Override
-    void timedout(long seqNo) {
-
+    public void timedout(long seqNo) {
+        lostSeqs.add(seqNo);     // assuming it can't be acknowledged before
     }
 
     @Override
     public long getNextSeqNo() {
-        return 0;
+        if(!lostSeqs.isEmpty()) {
+            long seqNo = lostSeqs.iterator().next();
+            lostSeqs.remove(seqNo);
+            return seqNo;
+        } else if(nextSeqNum >= base && nextSeqNum < base + windowSize){
+            return nextSeqNum;
+        } else {
+            return -1;
+        }
     }
 
 }

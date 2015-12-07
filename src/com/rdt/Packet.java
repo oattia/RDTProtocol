@@ -1,6 +1,7 @@
 package com.rdt;
 
 import java.net.DatagramPacket;
+import java.net.InetAddress;
 
 public abstract class Packet {
 
@@ -28,7 +29,7 @@ public abstract class Packet {
 
     // offsets in byte array of packet
     protected static final int T_DATA = 0;
-    protected static final int T_ACK= 1;
+    protected static final int T_ACK = 1;
     protected static final int T_FILE_NOT_FND = 2;
     protected static final int T_REQUEST = 3;
 
@@ -41,6 +42,9 @@ public abstract class Packet {
     protected byte[] chunkData;
     protected int packetType;
     protected long seqNo;
+    protected int port;
+    protected InetAddress ip;
+
 
 
     public Packet() {    }
@@ -69,6 +73,9 @@ public abstract class Packet {
 
         checkSum = computeChecksum(data, 2, PACKET_HEADER_SIZE + chunkLength);
         isCorrupted = (checkSum == getInt(receivedChecksum) );
+
+        port = packet.getPort();
+        ip = packet.getAddress();
     }
 
 
@@ -89,7 +96,7 @@ public abstract class Packet {
         checkSum = computeChecksum(packetData, 2, PACKET_HEADER_SIZE + chunkLength);
         System.arraycopy(getBytes(checkSum), 0, packetData, POS_CHECKSUM, 2);
 
-        return new DatagramPacket(packetData, packetData.length);
+        return new DatagramPacket(packetData, 0, packetData.length, ip, port);
     }
 
 
@@ -114,6 +121,15 @@ public abstract class Packet {
         sum = ~sum;
         return sum;
     }
+
+    public int getPort() {
+        return port;
+    }
+
+    public InetAddress getIp() {
+        return ip;
+    }
+
 
     protected static byte[] getBytes(int num) {
         byte[] bytes = new byte[Integer.BYTES];
@@ -163,5 +179,9 @@ public abstract class Packet {
         System.arraycopy(data, POS_PACKET_TYPE, packetTypeBytes, 0, 4);
 
         return getInt(packetTypeBytes);
+    }
+
+    public boolean isCorrupted(){
+        return isCorrupted;
     }
 }

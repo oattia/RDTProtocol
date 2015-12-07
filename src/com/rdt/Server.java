@@ -1,8 +1,5 @@
 package com.rdt;
 
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -45,6 +42,7 @@ public class Server {
 
     public Server (ServerConfig serverConfig){
 
+
     }
 
     public Server(int port, int maxN, long rngSeed, float plp, String strategy) throws SocketException {
@@ -70,21 +68,20 @@ public class Server {
                    continue;
                }
             }
-            DatagramPacket pkt = new DatagramPacket(new byte[EXPECTED_REQ_SIZE], EXPECTED_REQ_SIZE);
 
             try {
+                DatagramPacket pkt = new DatagramPacket(new byte[EXPECTED_REQ_SIZE], EXPECTED_REQ_SIZE);
                 welcomingSocket.receive(pkt);
+                RequestPacket reqPkt = new RequestPacket(pkt);
+                Thread connectionHandler = new Thread(
+                        new ConnectionHandler(strategy, reqPkt,
+                                plp, pep,  rngSeed, maxN)
+                );
+                connectionHandler.start();
+                workers.add(new Worker(connectionHandler, System.currentTimeMillis()));
             } catch (IOException e) {
                 continue;
             }
-
-            String fileName = "";
-            Thread connectionHandler = new Thread(
-                    new ConnectionHandler(strategy, fileName,
-                    plp, pep,  rngSeed, maxN)
-            );
-            connectionHandler.start();
-            workers.add(new Worker(connectionHandler, System.currentTimeMillis()));
         }
     }
 

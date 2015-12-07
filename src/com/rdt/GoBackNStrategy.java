@@ -1,33 +1,45 @@
 package com.rdt;
 
 public class GoBackNStrategy extends TransmissionStrategy {
-    public GoBackNStrategy(int numOfPackets, int initSeqNo, int initWindowSize) {
+
+    public GoBackNStrategy(int numOfPackets, long initSeqNo, int initWindowSize) {
         super(numOfPackets, initSeqNo, initWindowSize);
     }
 
     @Override
-    boolean isDone() {
-        return false;
+    public boolean isDone() {
+        return base == (numOfPackets + initSeqNo);
     }
 
     @Override
-    void sent(long seqNo) {
-
+    public void sent(long seqNo) {
+        if(seqNo == nextSeqNum)
+            nextSeqNum++;
     }
 
     @Override
-    void acknowledged(long seqNo) {
-
+    public void acknowledged(long seqNo) {
+        if (seqNo == base) { // In order Ack.
+            base++;
+            // Congestion logic.
+        } else {
+          // Ack out of order ... neglect!
+        }
     }
 
     @Override
-    void timedout(long seqNo) {
-
+    public void timedout(long seqNo) { // base = 2313, pkts = 5, init = 2313
+        if(seqNo >= base && seqNo < base + windowSize) // Paranoid much?
+            nextSeqNum = base;
     }
 
     @Override
-    long getNextSeqNo() {
-        return 0;
+    public long getNextSeqNo() {
+        if(nextSeqNum >= base && nextSeqNum < base + windowSize){
+            return nextSeqNum;
+        } else {
+            return -1;
+        }
     }
 
 }
