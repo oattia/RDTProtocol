@@ -25,8 +25,9 @@ public class StopAndWaitStrategy extends TransmissionStrategy {
 
     @Override
     public void timedout(long seqNo) {
-        if(seqNo == base)
+        if (seqNo == base){
             nextSeqNum--;
+        }
     }
 
     @Override

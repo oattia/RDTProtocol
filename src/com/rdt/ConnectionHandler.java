@@ -105,7 +105,8 @@ public class ConnectionHandler implements Runnable, Subscriber {
             return false;
         }
 
-        int numOfChunx = (int) Math.ceil(file.length() / CHUNK_SIZE) + 1;
+        int numOfChunx = (int) Math.ceil(((double)file.length() / (double)CHUNK_SIZE));
+        System.out.println("CAUNX: " + numOfChunx);
         int initialSeqNo = 1;
 
         if (strategyName == null) {
@@ -163,6 +164,9 @@ public class ConnectionHandler implements Runnable, Subscriber {
             }
             //
         }
+
+        System.out.println("DONE!!!!");
+
         if(strategy.isDone())
             System.out.println("File is done...");
         else if(timeoutInterval >= MAX_PKT_TIMEOUT)
@@ -267,13 +271,15 @@ public class ConnectionHandler implements Runnable, Subscriber {
     }
 
     private void handleTimeoutEvent(TimeoutEvent e) {
-        System.out.println("timedout: "+ e.getSeqNo());
+
         acceptingTimeouts.compareAndSet(true, false);
 
         long seqNo = e.getSeqNo();
-        strategy.timedout(seqNo);
-        timeoutMap.remove(seqNo);
-        timedoutNotAcked.add(seqNo);
+        if(timeoutMap.containsKey(seqNo)) {
+            System.out.println("timedout: " + e.getSeqNo());
+            strategy.timedout(seqNo);
+            timedoutNotAcked.add(seqNo);
+        }
 
         Map<Long, TimeoutTimerTask> newMap = new HashMap<>();
 
@@ -298,6 +304,10 @@ public class ConnectionHandler implements Runnable, Subscriber {
     }
 
     private void setTimer(Packet pkt, long seqNo) {
+        if(timeoutMap.containsKey(seqNo)){
+            timeoutMap.remove(seqNo).cancel();
+        }
+
         TimeoutTimerTask ttt = new TimeoutTimerTask(seqNo, System.currentTimeMillis(), timeoutInterval, pkt);
         ttt.subscribe(this);
         timeoutMap.put(seqNo, ttt);
