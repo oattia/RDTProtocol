@@ -43,11 +43,15 @@ public class SelectiveRepeatStrategy extends TransmissionStrategy {
         }
 
         // Congestion logic.
+        updateWinSize_ackRecv();
     }
 
     @Override
     public void timedout(long seqNo) {
         lostSeqs.add(seqNo);     // assuming it can't be acknowledged before
+
+        // Congestion logic
+        updateWinSize_timeout();
     }
 
     @Override
