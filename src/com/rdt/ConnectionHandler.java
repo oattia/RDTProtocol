@@ -27,8 +27,8 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private Map<Long, TimeoutTimerTask> timeoutMap;
     private Random rng;
     private Set<Long> timedoutNotAcked;
-    private float plp = 0.05f;         // packet loss probability: from 0 to 100
-    private float pep = 0.05f;         // packet error probability: from 0 to 100
+    private float plp = 0.0f;         // packet loss probability: from 0 to 100
+    private float pep = 0.0f;         // packet error probability: from 0 to 100
     private String strategyName;
     private String fileName;
     private int windowSize;
@@ -78,8 +78,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
         try {
             file = new File(fileName);
             fileStream = new FileInputStream(file);
-            DatagramPacket dpt = new AckPacket(file.length(), destPort, destIp).createDatagramPacket();
-            socket.send(dpt);
+            socket.send(new AckPacket(file.length(), destPort, destIp).createDatagramPacket());
 
             TIMER.schedule(new TimerTask() {
                 @Override
@@ -166,7 +165,6 @@ public class ConnectionHandler implements Runnable, Subscriber {
         }
 
         System.out.println("DONE!!!!");
-
         if(strategy.isDone())
             System.out.println("File is done...");
         else if(timeoutInterval >= MAX_PKT_TIMEOUT)
@@ -252,7 +250,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
     }
 
     private void handleAckEvent(AckEvent e) {
-        System.out.println("acked: " + e.getAckNo());
+        System.out.println("acked: " + e.getAckNo() + "\n");
         long timeNow = System.currentTimeMillis();
         long seqNo = e.getAckNo();
         TimeoutTimerTask ttt = timeoutMap.remove(seqNo);
@@ -279,6 +277,8 @@ public class ConnectionHandler implements Runnable, Subscriber {
             System.out.println("timedout: " + e.getSeqNo());
             strategy.timedout(seqNo);
             timedoutNotAcked.add(seqNo);
+        } else {
+            return;
         }
 
         Map<Long, TimeoutTimerTask> newMap = new HashMap<>();

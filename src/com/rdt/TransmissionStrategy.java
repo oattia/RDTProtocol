@@ -43,4 +43,24 @@ public abstract class TransmissionStrategy {
         long[] w = { base, base + windowSize };
         return w;
     }
+
+    public int getNumOfPackets() {
+        return numOfPackets;
+    }
+
+    public long getInitSeqNo() {
+        return initSeqNo;
+    }
+
+    public int getWindowSize() {
+        return windowSize;
+    }
+
+    public long getBase() {
+        return base;
+    }
+
+    public long getNextSeqNum() {
+        return nextSeqNum;
+    }
 }

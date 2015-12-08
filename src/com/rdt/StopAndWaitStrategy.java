@@ -21,6 +21,8 @@ public class StopAndWaitStrategy extends TransmissionStrategy {
     public void acknowledged(long seqNo) {
         if (seqNo == base)
             base++;
+        if(nextSeqNum < base)
+            nextSeqNum = base;
     }
 
     @Override
