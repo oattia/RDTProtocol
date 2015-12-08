@@ -8,7 +8,6 @@ import com.rdt.utils.Subscriber;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.SocketException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -52,7 +51,13 @@ public class SocketListener implements Runnable, Publisher {
 
             try {
                 socket.receive(dtgrm);
-                AckEvent ackE = new AckEvent(dtgrm, System.currentTimeMillis());
+                AckPacket pkt = new AckPacket(dtgrm);
+
+                if(pkt.isCorrupted()){
+                    continue;
+                }
+
+                AckEvent ackE = new AckEvent(pkt, System.currentTimeMillis());
                 publish(ackE);
             } catch (IOException e) {
                continue;

@@ -24,6 +24,8 @@ public class RequestPacket extends Packet {
     }
 
     public String getFileName() {
-        return getString(chunkData);
+        byte[] exactChunk = new byte[chunkLength];
+        System.arraycopy(chunkData, 0, exactChunk, 0, chunkLength);
+        return getString(exactChunk);
     }
 }

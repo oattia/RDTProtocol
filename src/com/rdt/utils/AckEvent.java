@@ -8,8 +8,8 @@ public class AckEvent implements Event {
     private AckPacket pkt;
     private long timestamp;
 
-    public AckEvent(DatagramPacket ackPkt, long ts) {
-        this.pkt = new AckPacket(ackPkt);
+    public AckEvent(AckPacket ackPkt, long ts) {
+        this.pkt = ackPkt;
         this.timestamp = ts;
     }
 

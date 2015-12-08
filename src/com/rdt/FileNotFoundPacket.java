@@ -7,7 +7,7 @@ public class FileNotFoundPacket extends Packet {
 
     private String fileName;
 
-    public FileNotFoundPacket(String requestedFilePath, int port, InetAddress ip){
+    public FileNotFoundPacket(String requestedFilePath, int port, InetAddress ip) {
         this.packetType = T_FILE_NOT_FND;
 
         this.fileName = requestedFilePath;

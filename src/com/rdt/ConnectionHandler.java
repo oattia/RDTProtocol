@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
@@ -32,6 +33,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private String fileName;
     private int windowSize;
 
+    private boolean connected = false;
     private double estimatedRtt = 1000.0d;
     private double devRtt = 0.0;
     private long timeoutInterval = 1000L; // In milliseconds
@@ -41,13 +43,12 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
     private static final Timer TIMER = new Timer(true);
     private static final long NICENESS = 50L; // milliseconds to sleep every iteration
-    private static final int CHUNK_SIZE = 64000;
+    private static final int CHUNK_SIZE = 1024;
     private static final float ALPHA = 0.125f;
     private static final float BETA = 0.25f;
     private static final long MAX_PKT_TIMEOUT = 60_000L;
 
     public ConnectionHandler(String strategyName, RequestPacket request, float plp, float pep, long seed, int windowSize) {
-
         this.strategyName = strategyName;
         this.fileName = request.getFileName();
         this.destPort = request.getPort();
@@ -58,21 +59,54 @@ public class ConnectionHandler implements Runnable, Subscriber {
         this.rng = new Random(seed);
         this.windowSize = windowSize;
         this.timedoutNotAcked = new HashSet<>();
-        acceptingTimeouts = new AtomicBoolean(true);
+        this.acceptingTimeouts = new AtomicBoolean(true);
+
+        this.mailbox = new LinkedBlockingQueue<>();
+        this.timeoutMap = new HashMap<>();
     }
 
     private boolean init() {
+
+        try {
+            socket = new DatagramSocket();
+            socket.connect(destIp, destPort);
+        } catch (SocketException e) {
+            // TODO
+        }
+
         File file;
         try {
             file = new File(fileName);
             fileStream = new FileInputStream(file);
-        }catch(FileNotFoundException e) {
+            DatagramPacket dpt = new AckPacket(file.length(), destPort, destIp).createDatagramPacket();
+            socket.send(dpt);
+
+            TIMER.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    if(!connected)
+                        kill();
+                }
+            }, timeoutInterval);
+            DatagramPacket pkt = new DatagramPacket(new byte[2048], 2048);
+            socket.receive(pkt);
+            AckPacket ack3 = new AckPacket(pkt);
+            if(ack3.isCorrupted()) {
+                return false;
+            } else {
+                connected = true;
+            }
+        } catch(FileNotFoundException e) {
             sendNotFoundPacket();
+            e.printStackTrace();
+            return false;
+        } catch (IOException e) {
+            e.printStackTrace();
             return false;
         }
 
-        int numOfChunx = (int) Math.ceil(file.length() / CHUNK_SIZE);
-        int initialSeqNo = rng.nextInt(1000);
+        int numOfChunx = (int) Math.ceil(file.length() / CHUNK_SIZE) + 1;
+        int initialSeqNo = 1;
 
         if (strategyName == null) {
             throw new IllegalArgumentException();
@@ -85,15 +119,6 @@ public class ConnectionHandler implements Runnable, Subscriber {
         } else {
             throw new IllegalArgumentException();
         }
-
-        try {
-            socket = new DatagramSocket();
-        } catch (SocketException e) {
-            // TODO
-        }
-
-        mailbox = new LinkedBlockingQueue<>();
-        timeoutMap = new HashMap<>();
 
         socketListener = new SocketListener(socket);
         socketListener.subscribe(this);
@@ -116,20 +141,15 @@ public class ConnectionHandler implements Runnable, Subscriber {
                 if(!timeoutMap.containsKey(seqNo)) {
                     pkt = makeDataPacket(seqNo);
                 } else {
-                    TimeoutTimerTask ttt = timeoutMap.get(seqNo);
-                    if(ttt.scheduledExecutionTime() > System.currentTimeMillis()){
-                        if(timedoutNotAcked.contains(seqNo)){
-
-                        } else {
-
-                        }
-                    } else {
-
-                    }
-                    pkt = (DataPacket) timeoutMap.get(seqNo).getPkt();
+                    TimeoutTimerTask ttt = timeoutMap.remove(seqNo);
+                    ttt.cancel();
+                    pkt = (DataPacket) ttt.getPkt();
                 }
-                sendDataPacket(pkt);
-                setTimer(pkt, seqNo);
+                if(pkt != null) {
+                    sendDataPacket(pkt);
+                    System.out.println("SENT " + seqNo);
+                    setTimer(pkt, seqNo);
+                }
             }
 
             if(!mailbox.isEmpty()) {
@@ -143,20 +163,33 @@ public class ConnectionHandler implements Runnable, Subscriber {
             }
             //
         }
+        if(strategy.isDone())
+            System.out.println("File is done...");
+        else if(timeoutInterval >= MAX_PKT_TIMEOUT)
+            System.out.println("Max timeout is reached...");
+        clean();
+    }
+
+    public void kill(){
         clean();
     }
 
     private void clean() {
         socket.close();
-        for(Map.Entry<Long, TimeoutTimerTask> e : timeoutMap.entrySet()){
-            e.getValue().cancel();
-        }
+        if(!timeoutMap.isEmpty())
+            for(Map.Entry<Long, TimeoutTimerTask> e : timeoutMap.entrySet()){
+                e.getValue().cancel();
+            }
         timeoutMap.clear();
         TIMER.purge();
     }
 
     private void sendNotFoundPacket() {
-
+        try {
+            socket.send(new FileNotFoundPacket(fileName, destPort, destIp).createDatagramPacket());
+        } catch (IOException e) {
+            // Do nothing ...
+        }
     }
 
     private DataPacket makeDataPacket(long seqNo) {
@@ -164,6 +197,10 @@ public class ConnectionHandler implements Runnable, Subscriber {
         int actualLen;
         try {
             actualLen = fileStream.read(data);
+            if(actualLen == -1) {
+                fileStream.close();
+                return null;
+            }
         } catch(IOException e) {
             return null;
         }
@@ -193,9 +230,8 @@ public class ConnectionHandler implements Runnable, Subscriber {
         while (!mailbox.isEmpty()) {
             Event e = mailbox.poll();
             if(e instanceof TimeoutEvent) {
-                TimeoutEvent tt = (TimeoutEvent)e;
+                TimeoutEvent tt = (TimeoutEvent) e;
                 if(firstTimeout) {
-                    firstTimeout = false;
                     handleTimeoutEvent(tt);
                 } else {
                    if(timeoutMap.get(tt.getSeqNo()).scheduledExecutionTime() > System.currentTimeMillis()){
@@ -212,6 +248,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
     }
 
     private void handleAckEvent(AckEvent e) {
+        System.out.println("acked: " + e.getAckNo());
         long timeNow = System.currentTimeMillis();
         long seqNo = e.getAckNo();
         TimeoutTimerTask ttt = timeoutMap.remove(seqNo);
@@ -230,6 +267,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
     }
 
     private void handleTimeoutEvent(TimeoutEvent e) {
+        System.out.println("timedout: "+ e.getSeqNo());
         acceptingTimeouts.compareAndSet(true, false);
 
         long seqNo = e.getSeqNo();

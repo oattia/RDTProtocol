@@ -19,11 +19,8 @@ public class GoBackNStrategy extends TransmissionStrategy {
 
     @Override
     public void acknowledged(long seqNo) {
-        if (seqNo == base) { // In order Ack.
-            base++;
-            // Congestion logic.
-        } else {
-          // Ack out of order ... neglect!
+        if(seqNo >= base) {
+            base = seqNo + 1;  // Cumulative Ack!
         }
     }
 

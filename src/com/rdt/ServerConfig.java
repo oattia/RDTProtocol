@@ -24,12 +24,22 @@ public class ServerConfig {
         }
 
         ServerConfig sc = new ServerConfig();
-        sc.port = Integer.parseInt(in.readLine());
-        sc.maxN = Integer.parseInt(in.readLine());
-        sc.rngSeed= Long.parseLong(in.readLine());
-        sc.plp = Float.parseFloat(in.readLine());
-        sc.strategy = in.readLine();
-        sc.strategy = sc.strategy == null ? "StopAndWait" : sc.strategy;
+
+        String inn = in.readLine();
+        sc.port = inn == null ? 3390 : Integer.parseInt(inn);
+
+        inn = in.readLine();
+        sc.maxN = inn == null ? 5: Integer.parseInt(inn);
+
+        inn = in.readLine();
+        sc.rngSeed = inn == null ? System.currentTimeMillis() : Long.parseLong(inn);
+
+        inn = in.readLine();
+        sc.plp = inn == null ? 0.2f: Float.parseFloat(inn);
+
+        inn = in.readLine();
+        sc.strategy = inn == null ? TransmissionStrategy.STOP_AND_WAIT : inn;
+
         in.close();
         return sc;
     }

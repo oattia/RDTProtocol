@@ -55,6 +55,7 @@ public abstract class Packet {
 
         byte[] actualLenBytes = new byte[4];
         System.arraycopy(data, POS_LENGTH, actualLenBytes, 0,  4);
+
         chunkLength = getInt(actualLenBytes);
 
         chunkData = new byte[chunkLength];
@@ -88,7 +89,12 @@ public abstract class Packet {
         byte[] seqNoBytes = getBytes(seqNo);
         System.arraycopy(seqNoBytes, 0, packetData, POS_SEQ_NO, 4);
 
-        System.arraycopy(chunkData, 0, packetData, PACKET_HEADER_SIZE, chunkLength);
+        try {
+            System.arraycopy(chunkData, 0, packetData, PACKET_HEADER_SIZE, chunkLength);
+        } catch (ArrayIndexOutOfBoundsException w){
+            System.out.println("Chunk Length: " + chunkLength);
+            System.out.println("packetData Length: " + packetData.length);
+        }
 
         byte[] packetTypeBytes = getBytes(packetType);
         System.arraycopy(packetTypeBytes, 0, packetData, POS_PACKET_TYPE, 4);
@@ -111,8 +117,10 @@ public abstract class Packet {
 
     protected static int computeChecksum(byte[] data, int start, int end) {
         int sum = 0;
-        for(int i=start; i<end; i+=2) {
-            int num = ((((int)data[i])&0xff) << Byte.SIZE) + (((int)data[i + 1])&0xff);
+        int second = 0;
+        for(int i = start; i < end; i += 2) {
+            second = i + 1 >= end ? 0 : data[i + 1];
+            int num = ((((int)data[i])&0xff) << Byte.SIZE) + (second&0xff);
             sum += num;
             if (sum >= (1 << 16))
                 sum += 1;
@@ -149,26 +157,26 @@ public abstract class Packet {
         return str.getBytes();
     }
 
-    protected static int getInt(byte[] bytes){
-        int value=0;
-        for(int i=0; i<bytes.length; i++){
-            value = value << Byte.SIZE;
-            value += (((int)bytes[i])&0xff);
+    public static int getInt(byte[] bytes){
+        int value = bytes[bytes.length - 1] & 0xFF;
+        for(int i = bytes.length - 2; i >= 0; i--){
+            value <<= Byte.SIZE;
+            value += (((int)bytes[i]) & 0xFF);
         }
         return value;
     }
 
-    protected static long getLong(byte[] bytes){
-        Long value=0L;
-        for(int i=0; i<bytes.length; i++){
-            value = value << Byte.SIZE;
-            value += (((long)bytes[i])&0xff);
+    public static long getLong(byte[] bytes){
+        long value= bytes[bytes.length - 1] & 0xFF;
+        for(int i = bytes.length - 2; i >= 0; i--){
+            value <<= Byte.SIZE;
+            value += (((long)bytes[i]) & 0xFF);
         }
         return value;
     }
 
 
-    protected String getString(byte[] data) {
+    public String getString(byte[] data) {
         return new String(data);
     }
 
