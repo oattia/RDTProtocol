@@ -6,12 +6,14 @@ import java.util.Set;
 public class SelectiveRepeatStrategy extends TransmissionStrategy {
 
     private Set<Long> lostSeqs;
+    private Set<Long> sentSeq;
     private Set<Long> notAcked;     // lostSeqs is subset of notAcked
 
     public SelectiveRepeatStrategy(int numOfPackets, int initSeqNo, int initWindowSize) {
         super(numOfPackets, initSeqNo, initWindowSize);
         lostSeqs = new HashSet<>();
         notAcked = new HashSet<>();
+        sentSeq  = new HashSet<>();
     }
 
     @Override
@@ -24,6 +26,7 @@ public class SelectiveRepeatStrategy extends TransmissionStrategy {
         if(seqNo == nextSeqNum)
             nextSeqNum++;
         notAcked.add(seqNo);
+        sentSeq.add(seqNo);
     }
 
     @Override
@@ -31,11 +34,14 @@ public class SelectiveRepeatStrategy extends TransmissionStrategy {
         lostSeqs.remove(seqNo);
         notAcked.remove(seqNo);
         if (seqNo == base) {
-            while(!notAcked.contains(base))
+            while (!notAcked.contains(base) && sentSeq.contains(base)){
+                sentSeq.remove(base);
                 base++;
+            }
         } else {
             // Ack out of order ... don't slide the window
         }
+
         // Congestion logic.
     }
 
@@ -46,6 +52,8 @@ public class SelectiveRepeatStrategy extends TransmissionStrategy {
 
     @Override
     public long getNextSeqNo() {
+        System.out.println("nextSeq = " + nextSeqNum);
+        System.out.println("base = " + base);
         if(!lostSeqs.isEmpty()) {
             long seqNo = lostSeqs.iterator().next();
             lostSeqs.remove(seqNo);
