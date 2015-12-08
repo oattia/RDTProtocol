@@ -53,7 +53,7 @@ public class SocketListener implements Runnable, Publisher {
                 socket.receive(dtgrm);
                 AckPacket pkt = new AckPacket(dtgrm);
 
-                if(pkt.isCorrupted()){
+                if(pkt.isCorrupted()) { // Leave it to the timeout to handle
                     continue;
                 }
 

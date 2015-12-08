@@ -13,27 +13,29 @@ import java.net.SocketException;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConnectionHandler implements Runnable, Subscriber {
 
-    private AtomicBoolean acceptingTimeouts;
-    private BlockingQueue<Event> mailbox;
-    private TransmissionStrategy strategy;
-    private DatagramSocket socket;
-    private SocketListener socketListener;
-    private Thread socketListenerThread;
-    private FileInputStream fileStream;
-    private Map<Long, TimeoutTimerTask> timeoutMap;
-    private Random rng;
-    private Set<Long> timedoutNotAcked;
-    private float plp = 0.0f;         // packet loss probability: from 0 to 100
-    private float pep = 0.0f;         // packet error probability: from 0 to 100
     private String strategyName;
-    private String fileName;
     private int windowSize;
+    private TransmissionStrategy strategy;
 
-    private boolean connected = false;
+    private DatagramSocket socket;
+
+    private String fileName;
+    private FileInputStream fileStream;
+
+    private Map<Long, TimeoutTimerTask> timeoutMap;
+    private Map<Long, DataPacket> packetMap;
+    private Set<Long> timedoutNotAcked;
+    private BlockingQueue<Event> mailbox;
+    private Set<Long> acked;
+
+    private Random rng;
+
+    private double plp;         // packet loss probability: from 0 to 1
+    private double pep;         // packet error probability: from 0 to 1
+
     private double estimatedRtt = 1000.0d;
     private double devRtt = 0.0;
     private long timeoutInterval = 1000L; // In milliseconds
@@ -41,14 +43,15 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private int destPort;
     private InetAddress destIp;
 
-    private static final Timer TIMER = new Timer(true);
-    private static final long NICENESS = 50L; // milliseconds to sleep every iteration
-    private static final int CHUNK_SIZE = 1024;
+
+    private static final Timer TIMER = new Timer(true); // Thread safe.
+    private static final long NICENESS = 1L; // milliseconds to sleep every iteration
+    private static final int CHUNK_SIZE = 1024; // bytes
     private static final float ALPHA = 0.125f;
     private static final float BETA = 0.25f;
-    private static final long MAX_PKT_TIMEOUT = 60_000L;
+    private static final long MAX_PKT_TIMEOUT = 60_000L; // one minute
 
-    public ConnectionHandler(String strategyName, RequestPacket request, float plp, float pep, long seed, int windowSize) {
+    public ConnectionHandler(String strategyName, RequestPacket request, double plp, double pep, long seed, int windowSize) {
         this.strategyName = strategyName;
         this.fileName = request.getFileName();
         this.destPort = request.getPort();
@@ -58,11 +61,12 @@ public class ConnectionHandler implements Runnable, Subscriber {
         this.pep = pep;
         this.rng = new Random(seed);
         this.windowSize = windowSize;
-        this.timedoutNotAcked = new HashSet<>();
-        this.acceptingTimeouts = new AtomicBoolean(true);
 
+        this.timedoutNotAcked = new HashSet<>();
         this.mailbox = new LinkedBlockingQueue<>();
         this.timeoutMap = new HashMap<>();
+        this.packetMap = new HashMap<>();
+        this.acked = new HashSet<>();
     }
 
     private boolean init() {
@@ -71,7 +75,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
             socket = new DatagramSocket();
             socket.connect(destIp, destPort);
         } catch (SocketException e) {
-            // TODO
+          return false;
         }
 
         File file;
@@ -80,20 +84,20 @@ public class ConnectionHandler implements Runnable, Subscriber {
             fileStream = new FileInputStream(file);
             socket.send(new AckPacket(file.length(), destPort, destIp).createDatagramPacket());
 
-            TIMER.schedule(new TimerTask() {
+            TimerTask killIfNotConnected = new TimerTask() {
                 @Override
                 public void run() {
-                    if(!connected)
-                        kill();
+                    kill();
                 }
-            }, timeoutInterval);
+            };
+            TIMER.schedule(killIfNotConnected, timeoutInterval * 3);
             DatagramPacket pkt = new DatagramPacket(new byte[2048], 2048);
             socket.receive(pkt);
             AckPacket ack3 = new AckPacket(pkt);
             if(ack3.isCorrupted()) {
                 return false;
             } else {
-                connected = true;
+                killIfNotConnected.cancel();
             }
         } catch(FileNotFoundException e) {
             sendNotFoundPacket();
@@ -105,7 +109,8 @@ public class ConnectionHandler implements Runnable, Subscriber {
         }
 
         int numOfChunx = (int) Math.ceil(((double)file.length() / (double)CHUNK_SIZE));
-        System.out.println("CAUNX: " + numOfChunx);
+        System.out.println("CHUNX: " + numOfChunx);
+
         int initialSeqNo = 1;
 
         if (strategyName == null) {
@@ -119,60 +124,68 @@ public class ConnectionHandler implements Runnable, Subscriber {
         } else {
             throw new IllegalArgumentException();
         }
-
-        socketListener = new SocketListener(socket);
+        SocketListener socketListener = new SocketListener(socket);
         socketListener.subscribe(this);
-
-        socketListenerThread = new Thread(socketListener);
-        socketListenerThread.start();
+        new Thread(socketListener).start();
         return true;
     }
 
     @Override
     public void run() {
-        if(!init())
-            return;
+        if(!init()) return;
 
+        int i = 0;
         while (!strategy.isDone() && timeoutInterval <= MAX_PKT_TIMEOUT) {
-            long seqNo = strategy.getNextSeqNo();
-
-            if(seqNo != -1L) {
+            long seqNo;
+            while((seqNo = strategy.getNextSeqNo()) != -1L) {
+                i = 0;
                 DataPacket pkt;
-                if(!timeoutMap.containsKey(seqNo)) {
+                if(!packetMap.containsKey(seqNo)) {
                     pkt = makeDataPacket(seqNo);
+                    packetMap.put(seqNo, pkt);
                 } else {
-                    TimeoutTimerTask ttt = timeoutMap.remove(seqNo);
-                    ttt.cancel();
-                    pkt = (DataPacket) ttt.getPkt();
+                    pkt = packetMap.get(seqNo);
                 }
-                if(pkt != null) {
-                    sendDataPacket(pkt);
-                    System.out.println("SENT " + seqNo);
-                    setTimer(pkt, seqNo);
-                }
+                sendDataPacket(pkt);
+                setTimer(seqNo);
+                System.out.println("SENT " + seqNo);
             }
 
-            if(!mailbox.isEmpty()) {
-                consumeMailbox();
+            consumeMailbox();
+
+            i++;
+
+            if(i >= 1000) {
+                TimeoutTimerTask ttt = timeoutMap.get(strategy.getBase());
+
+                System.out.println("\n\nBase: " + strategy.getBase());
+                System.out.println("NextSeqNo: "+ strategy.getNextSeqNum());
+                System.out.println("WindowSize: " + strategy.getWindowSize());
+                System.out.println("timeout interval: " + timeoutInterval);
+                System.out.println("size: " + mailbox.size());
+                System.out.println(ttt.scheduledExecutionTime() > System.currentTimeMillis());
+
+                System.out.println(ttt.scheduledExecutionTime());
+                System.out.println(ttt.getTimestamp() + ttt.getDelay());
+                System.out.println(System.currentTimeMillis());
+                System.out.println("\n");
+                i = 0;
             }
 
             try {
                 Thread.sleep(NICENESS);
-            } catch (InterruptedException e){
-                // TODO
-            }
-            //
+            } catch (InterruptedException e){}
         }
 
-        System.out.println("DONE!!!!");
+        System.out.println("Loop exited!!!!");
         if(strategy.isDone())
             System.out.println("File is done...");
         else if(timeoutInterval >= MAX_PKT_TIMEOUT)
-            System.out.println("Max timeout is reached...");
+            System.out.println("Max timeout for packet is reached...");
         clean();
     }
 
-    public void kill(){
+    public void kill() {
         clean();
     }
 
@@ -183,6 +196,9 @@ public class ConnectionHandler implements Runnable, Subscriber {
                 e.getValue().cancel();
             }
         timeoutMap.clear();
+        try {
+            fileStream.close();
+        } catch (IOException e) {}
         TIMER.purge();
     }
 
@@ -199,10 +215,6 @@ public class ConnectionHandler implements Runnable, Subscriber {
         int actualLen;
         try {
             actualLen = fileStream.read(data);
-            if(actualLen == -1) {
-                fileStream.close();
-                return null;
-            }
         } catch(IOException e) {
             return null;
         }
@@ -217,33 +229,24 @@ public class ConnectionHandler implements Runnable, Subscriber {
                 data[(bitWithError / 8)] ^= (1 << (bitWithError % 8));
                 pkt.setChunkData(data);
             }
-
             if(rng.nextFloat() >= plp)
                 socket.send(pkt.createDatagramPacket());
-
             strategy.sent(pkt.getSeqNo());
-        } catch (IOException e){
-            //TODO
-        }
+        } catch (IOException e){ }
     }
 
     private void consumeMailbox() {
-        boolean firstTimeout = true;
-        while (!mailbox.isEmpty()) {
-            Event e = mailbox.poll();
+        Event e = null;
+        while (mailbox.size() != 0) {
+            try {
+                e = mailbox.take();
+            } catch (InterruptedException ex) { ex.printStackTrace(); }
+
             if(e instanceof TimeoutEvent) {
-                TimeoutEvent tt = (TimeoutEvent) e;
-                if(firstTimeout) {
-                    handleTimeoutEvent(tt);
-                } else {
-                   if(timeoutMap.get(tt.getSeqNo()).scheduledExecutionTime() > System.currentTimeMillis()){
-                       // Do nothing ...
-                       // This is rescheduled
-                   } else {
-                        handleTimeoutEvent(tt);
-                   }
-                }
+                System.out.println(((TimeoutEvent) e).getSeqNo() + " taken as TimeoutEvent");
+                handleTimeoutEvent((TimeoutEvent) e);
             } else if(e instanceof AckEvent) {
+                System.out.println(((AckEvent) e).getAckNo() + " taken as AckEvent");
                 handleAckEvent((AckEvent) e);
             }
         }
@@ -251,36 +254,59 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
     private void handleAckEvent(AckEvent e) {
         System.out.println("acked: " + e.getAckNo() + "\n");
-        long timeNow = System.currentTimeMillis();
         long seqNo = e.getAckNo();
+
+        if(!timeoutMap.containsKey(seqNo)) // Already seen as a timeout
+            return;
+
         TimeoutTimerTask ttt = timeoutMap.remove(seqNo);
-        if(ttt != null) {
-            ttt.cancel();
-            if(!timedoutNotAcked.contains(seqNo)) {
-                double sampleRtt = (double) (timeNow - ttt.getTimestamp());
-                estimatedRtt = (1.0f - ALPHA) * estimatedRtt + ALPHA * sampleRtt;
-                devRtt = (1.0f - BETA) * devRtt + BETA * Math.abs(sampleRtt - estimatedRtt);
-                timeoutInterval = (long) Math.ceil(estimatedRtt + 4.0f * devRtt);
-            } else {
-                timedoutNotAcked.remove(seqNo);
-            }
+        ttt.cancel();
+        acked.add(seqNo);
+        if(!timedoutNotAcked.contains(seqNo)) {
+            long timeNow = System.currentTimeMillis();
+            double sampleRtt = (double) (timeNow - ttt.getTimestamp());
+            estimatedRtt = (1.0f - ALPHA) * estimatedRtt + ALPHA * sampleRtt;
+            devRtt = (1.0f - BETA) * devRtt + BETA * Math.abs(sampleRtt - estimatedRtt);
+            timeoutInterval = (long) Math.ceil(estimatedRtt + 4.0d * devRtt);
+        } else {
+            timedoutNotAcked.remove(seqNo);
         }
         strategy.acknowledged(seqNo);
     }
 
     private void handleTimeoutEvent(TimeoutEvent e) {
-
-        acceptingTimeouts.compareAndSet(true, false);
-
         long seqNo = e.getSeqNo();
-        if(timeoutMap.containsKey(seqNo)) {
-            System.out.println("timedout: " + e.getSeqNo());
-            strategy.timedout(seqNo);
-            timedoutNotAcked.add(seqNo);
-        } else {
-            return;
+
+        if(acked.contains(seqNo) ) {
+            System.out.println("Acked before");
+            return; // Rescheduled and did not fire again!
         }
 
+        if(timeoutMap.get(seqNo).scheduledExecutionTime() > System.currentTimeMillis()){
+            System.out.println("to be executed...");
+           return;
+        }
+
+        System.out.println("timedout: " + e.getSeqNo());
+
+        timeoutMap.remove(seqNo);
+        timedoutNotAcked.add(seqNo);
+
+        rescheduleAll();
+
+        TIMER.purge();
+        timeoutInterval *= 2L; // Exponential, must guard against!
+        strategy.timedout(seqNo);
+    }
+
+    private void setTimer(long seqNo) {
+        TimeoutTimerTask ttt = new TimeoutTimerTask(seqNo, System.currentTimeMillis(), timeoutInterval);
+        ttt.subscribe(this);
+        timeoutMap.put(seqNo, ttt);
+        TIMER.schedule(ttt, timeoutInterval);
+    }
+
+    private void rescheduleAll() {
         Map<Long, TimeoutTimerTask> newMap = new HashMap<>();
 
         for(Map.Entry<Long, TimeoutTimerTask> entry: timeoutMap.entrySet()) {
@@ -288,41 +314,31 @@ public class ConnectionHandler implements Runnable, Subscriber {
             TimeoutTimerTask tttE = entry.getValue();
             tttE.cancel();
             long sysMillis = System.currentTimeMillis();
-            long newDelay = tttE.getTimestamp() + 2L * tttE.getDelay() - sysMillis;
-            TimeoutTimerTask newTttE = new TimeoutTimerTask(seqNoE, sysMillis, newDelay, tttE.getPkt());
+            long newDelay = tttE.getTimestamp() + 2L * tttE.getDelay() - sysMillis + NICENESS;
+            TimeoutTimerTask newTttE = new TimeoutTimerTask(seqNoE, sysMillis, newDelay);
+            newTttE.subscribe(this);
             TIMER.schedule(newTttE, newDelay);
             newMap.put(seqNoE, newTttE);
         }
 
         timeoutMap.clear();
-        timeoutMap.putAll(newMap); // Maybe timeoutMap = newMap instead?
-        TIMER.purge();
-
-        timeoutInterval *= 2L; //Exponential, must guard against!
-
-        acceptingTimeouts.getAndSet(true);
-    }
-
-    private void setTimer(Packet pkt, long seqNo) {
-        if(timeoutMap.containsKey(seqNo)){
-            timeoutMap.remove(seqNo).cancel();
-        }
-
-        TimeoutTimerTask ttt = new TimeoutTimerTask(seqNo, System.currentTimeMillis(), timeoutInterval, pkt);
-        ttt.subscribe(this);
-        timeoutMap.put(seqNo, ttt);
-        TIMER.schedule(ttt, timeoutInterval);
+        timeoutMap = newMap;
     }
 
     @Override
     public void update(Event e) {
         if(e instanceof AckEvent) {
-            mailbox.offer(e);
-        } else if (e instanceof TimeoutEvent) {
-            if(acceptingTimeouts.get())
-                mailbox.offer(e);
-        } else {
-            // Do nothing ...
+            try {
+                mailbox.put(e);
+                System.out.println(((AckEvent) e).getAckNo() + " put in queue as AckEvent");
+                System.out.println(mailbox.size());
+            } catch (InterruptedException ex) {ex.printStackTrace();}
+        } else if(e instanceof TimeoutEvent){
+            try {
+                mailbox.put(e);
+                System.out.println(((TimeoutEvent) e).getSeqNo() + " put in queue as TimeoutEvent");
+                System.out.println(mailbox.size());
+            } catch (InterruptedException ex) {ex.printStackTrace();}
         }
     }
 }

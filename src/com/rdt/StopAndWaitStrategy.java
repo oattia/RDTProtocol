@@ -8,21 +8,14 @@ public class StopAndWaitStrategy extends TransmissionStrategy {
 
     @Override
     public boolean isDone() {
-        return (base == (numOfPackets + initSeqNo)) && (nextSeqNum == base);
+        return (base == (numOfPackets + initSeqNo));
     }
 
-    @Override
-    public void sent(long seqNo) {
-        if(seqNo == nextSeqNum)
-            nextSeqNum++;
-    }
 
     @Override
     public void acknowledged(long seqNo) {
         if (seqNo == base)
             base++;
-        if(nextSeqNum < base)
-            nextSeqNum = base;
     }
 
     @Override
@@ -30,6 +23,12 @@ public class StopAndWaitStrategy extends TransmissionStrategy {
         if (seqNo == base){
             nextSeqNum--;
         }
+    }
+
+    @Override
+    public void sent(long seqNo) {
+        if(seqNo == nextSeqNum)
+            nextSeqNum++;
     }
 
     @Override
