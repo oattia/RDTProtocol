@@ -103,8 +103,9 @@ public class Server {
                 welcomingSocket.receive(pkt);  //Blocks!
                 RequestPacket reqPkt = new RequestPacket(pkt);
 
-                if(reqPkt.isCorrupted())
+                if(reqPkt.isCorrupted()) {
                     continue;
+                }
 
                 ConnectionHandler conn = new ConnectionHandler(strategy, reqPkt,
                         plp, pep, rngSeed, maxN);

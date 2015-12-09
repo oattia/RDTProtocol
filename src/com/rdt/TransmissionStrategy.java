@@ -49,10 +49,13 @@ public abstract class TransmissionStrategy {
 
     protected void updateWinSize_timeout(){
         this.ssthreshold /= 2;
-        this.windowSize /= 2;       // if packet is lost: window size is halved
+        this.windowSize = (int)Math.ceil(this.windowSize/2.0);       // if packet is lost: window size is halved
         this.cwnd = this.windowSize*1.0;
         this.congestionTracingFile.println(this.windowSize);
         this.acksToCompleteWindow = this.windowSize;
+
+        System.out.println(" *********** "+this.windowSize);
+
     }
 
     protected void updateWinSize_ackRecv(){
@@ -63,6 +66,8 @@ public abstract class TransmissionStrategy {
             this.windowSize ++;
             this.cwnd ++;
         }
+
+        System.out.println(" *********** "+this.windowSize);
 
         if(this.acksToCompleteWindow == 0) {
             this.acksToCompleteWindow = this.windowSize;

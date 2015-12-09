@@ -52,7 +52,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private static final int CHUNK_SIZE = 1024; // bytes
     private static final float ALPHA = 0.125f;
     private static final float BETA = 0.25f;
-    private static final long MAX_PKT_TIMEOUT = 60_000L; // one minute
+    private static final long MAX_PKT_TIMEOUT = 6000_000L; // one minute
 
     public ConnectionHandler(String strategyName, RequestPacket request, double plp, double pep, long seed, int windowSize) {
         this.strategyName = strategyName;
@@ -61,7 +61,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
         this.destIp = request.getIp();
 
         this.plp = plp;
-        this.pep = pep;
+        this.pep = 0.0;
         this.rng = new Random(seed);
         this.windowSize = windowSize;
 
@@ -101,6 +101,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
                 return false;
             } else {
                 killIfNotConnected.cancel();
+                System.out.println("Connected!");
             }
         } catch(FileNotFoundException e) {
             sendNotFoundPacket();
@@ -187,7 +188,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
             System.out.println("Max timeout for packet is reached...");
         clean();
         long time2 = System.currentTimeMillis();
-        System.out.println("Time = " + (time2 - time1) / 1000);
+        System.out.println("Time = " + (double) (time2 - time1) / 1000.0);
     }
 
     public void kill() {
@@ -223,17 +224,23 @@ public class ConnectionHandler implements Runnable, Subscriber {
         } catch(IOException e) {
             return null;
         }
-        return new DataPacket(data, actualLen, seqNo, destPort, destIp);
+        DataPacket dp = new DataPacket(data, actualLen, seqNo, destPort, destIp);
+        dp.createDatagramPacket();
+        return dp;
     }
 
     private void sendDataPacket(DataPacket pkt) {
         try {
-            if(rng.nextFloat() < pep) {
-                byte[] data = pkt.getChunkData();
-                int bitWithError = rng.nextInt(8 * data.length);
-                data[(bitWithError / 8)] ^= (1 << (bitWithError % 8));
-                pkt.setChunkData(data);
-                System.out.println("Corrupted data in: " + pkt.getSeqNo());
+
+            if(rng.nextFloat() < pep) { // send corrupted
+                pkt.setChecksum(pkt.getCheckSum() * 2 + 1);
+                if(pkt.isCorrupted()) {
+                    System.out.println("Corrupted data in " + pkt.getSeqNo());
+                } else {
+                    System.out.println("MISTAKE");
+                }
+            } else {
+                pkt.refreshChecksum();
             }
 
             if(rng.nextFloat() >= plp) {
@@ -324,6 +331,9 @@ public class ConnectionHandler implements Runnable, Subscriber {
             tttE.cancel();
             long sysMillis = System.currentTimeMillis();
             long newDelay = tttE.getTimestamp() + 2L * tttE.getDelay() - sysMillis + NICENESS;
+            while(newDelay <= 0) {
+                newDelay += (3L * tttE.getDelay());
+            }
             TimeoutTimerTask newTttE = new TimeoutTimerTask(seqNoE, sysMillis, newDelay);
             newTttE.subscribe(this);
             TIMER.schedule(newTttE, newDelay);

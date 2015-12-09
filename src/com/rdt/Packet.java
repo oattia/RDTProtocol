@@ -9,15 +9,14 @@ public abstract class Packet {
     * Packet structure is as follows:
     *
     * ===========================================================
-    *   CHECKSUM                |   pos: 0, len: 2
-    *   PACKET_TYPE             |   pos:
-    *   CHUNCK_LENGTH           |   pos: 2, len: 4
-    *   SEQ_NO                  |   pos: 6, len: 4
+    *   CHECKSUM                |   pos: 0,  len: 2
+    *   CHUNCK_LENGTH           |   pos: 2,  len: 4
+    *   SEQ_NO                  |   pos: 6,  len: 4
+    *   PACKET_TYPE             |   pos: 10, len
     *   Rest of header (empty)  |   pos: 10, len: PACKET_HEADER_SIZE-10
     * -----------------------------------------------------------
     *   chunckData              |   pos: PACKET_HEADER_SIZE, len: chunkLength
     * ===========================================================
-    *
     * */
 
 
@@ -33,55 +32,44 @@ public abstract class Packet {
     protected static final int T_FILE_NOT_FND = 2;
     protected static final int T_REQUEST = 3;
 
-
     protected static final int PACKET_HEADER_SIZE = 20;
 
-    protected int checkSum; // Should be 16 bit only
     protected int chunkLength;   // Should be 16 bit only
-    protected boolean isCorrupted;
-    protected byte[] chunkData;
-    protected int packetType;
     protected long seqNo;
+    protected int packetType;
+    protected byte[] chunkData;
+
     protected int port;
     protected InetAddress ip;
 
+    protected int checkSum; // Should be 16 bit only
+
+    protected byte[] packetData;
 
 
-    public Packet() {    }
-
-
-    public Packet(DatagramPacket packet){
-        byte[] data = packet.getData();
-
+    protected void fillAttsFromPacketData() { // created by the other guy
         byte[] actualLenBytes = new byte[4];
-        System.arraycopy(data, POS_LENGTH, actualLenBytes, 0,  4);
-
+        System.arraycopy(packetData, POS_LENGTH, actualLenBytes, 0,  4);
         chunkLength = getInt(actualLenBytes);
 
-        chunkData = new byte[chunkLength];
-        System.arraycopy(data, PACKET_HEADER_SIZE, chunkData, 0, chunkLength);
-
         byte[] seqNoBytes = new byte[4];
-        System.arraycopy(data, POS_SEQ_NO, seqNoBytes, 0, 4);
+        System.arraycopy(packetData, POS_SEQ_NO, seqNoBytes, 0, 4);
         seqNo = getInt(seqNoBytes);
 
         byte[] packetTypeBytes = new byte[4];
-        System.arraycopy(data, POS_PACKET_TYPE, packetTypeBytes, 0, 4);
+        System.arraycopy(packetData, POS_PACKET_TYPE, packetTypeBytes, 0, 4);
         packetType = getInt(packetTypeBytes);
 
+        chunkData = new byte[chunkLength];
+        System.arraycopy(packetData, PACKET_HEADER_SIZE, chunkData, 0, chunkLength);
+
         byte[] receivedChecksum = new byte[2];
-        System.arraycopy(chunkData, POS_CHECKSUM, receivedChecksum, 0, 2);
-
-        checkSum = computeChecksum(data, 2, PACKET_HEADER_SIZE + chunkLength);
-        isCorrupted = (checkSum == getInt(receivedChecksum) );
-
-        port = packet.getPort();
-        ip = packet.getAddress();
+        System.arraycopy(packetData, POS_CHECKSUM, receivedChecksum, 0, 2);
+        checkSum = getInt(receivedChecksum) & 0xFF;
     }
 
-
-    public DatagramPacket createDatagramPacket() {
-        byte[] packetData = new byte[chunkLength + PACKET_HEADER_SIZE];
+    public void fillPacketDataFromAtt() { // created by me
+        packetData = new byte[PACKET_HEADER_SIZE + chunkLength];
 
         byte[] actualLenBytes = getBytes(chunkLength);
         System.arraycopy(actualLenBytes, 0, packetData, POS_LENGTH, 4);
@@ -89,31 +77,35 @@ public abstract class Packet {
         byte[] seqNoBytes = getBytes(seqNo);
         System.arraycopy(seqNoBytes, 0, packetData, POS_SEQ_NO, 4);
 
-        try {
-            System.arraycopy(chunkData, 0, packetData, PACKET_HEADER_SIZE, chunkLength);
-        } catch (ArrayIndexOutOfBoundsException w){
-            System.out.println("Chunk Length: " + chunkLength);
-            System.out.println("packetData Length: " + packetData.length);
-        }
-
         byte[] packetTypeBytes = getBytes(packetType);
         System.arraycopy(packetTypeBytes, 0, packetData, POS_PACKET_TYPE, 4);
 
+        System.arraycopy(chunkData, 0, packetData, PACKET_HEADER_SIZE, chunkLength);
+
         checkSum = computeChecksum(packetData, 2, PACKET_HEADER_SIZE + chunkLength);
         System.arraycopy(getBytes(checkSum), 0, packetData, POS_CHECKSUM, 2);
-
-        return new DatagramPacket(packetData, 0, packetData.length, ip, port);
     }
 
+    public void setChecksum(int cs) { // for simulating corruption only
+        this.checkSum = cs;
+    }
+
+    public int getCheckSum(){
+        return checkSum;
+    }
+
+    public void refreshChecksum() {
+        checkSum = computeChecksum(packetData, 2, PACKET_HEADER_SIZE + chunkLength);
+    }
+
+    public DatagramPacket createDatagramPacket() {
+        System.arraycopy(getBytes(checkSum), 0, packetData, POS_CHECKSUM, 2);
+        return new DatagramPacket(packetData, packetData.length, ip, port);
+    }
 
     public byte[] getChunkData() {
         return chunkData;
     }
-
-    public void setChunkData(byte[] chunkData) {
-        this.chunkData = chunkData;
-    }
-
 
     protected static int computeChecksum(byte[] data, int start, int end) {
         int sum = 0;
@@ -124,9 +116,10 @@ public abstract class Packet {
             sum += num;
             if (sum >= (1 << 16))
                 sum += 1;
-            sum %= (1 << 16);
+            sum &= 0xFFFF;
         }
         sum = ~sum;
+        sum &= 0xFFFF;
         return sum;
     }
 
@@ -138,22 +131,21 @@ public abstract class Packet {
         return ip;
     }
 
-
-    protected static byte[] getBytes(int num) {
+    public static byte[] getBytes(int num) {
         byte[] bytes = new byte[Integer.BYTES];
         for(int i = 0; i < Integer.BYTES; i++)
             bytes[i] = (byte) ((num & ((0xFF) << (i << 3))) >> (i << 3));
         return bytes;
     }
 
-    protected static byte[] getBytes(long num) {
+    public static byte[] getBytes(long num) {
         byte[] bytes = new byte[Long.BYTES];
         for(int i = 0; i < Long.BYTES; i++)
             bytes[i] = (byte) ((num & ((0xFF) << (i << 3))) >> (i << 3));
         return bytes;
     }
 
-    protected static byte[] getBytes(String str) {
+    public static byte[] getBytes(String str) {
         return str.getBytes();
     }
 
@@ -175,21 +167,19 @@ public abstract class Packet {
         return value;
     }
 
-
-    public String getString(byte[] data) {
+    public static String getString(byte[] data) {
         return new String(data);
     }
-
 
     public static int getType(DatagramPacket packet){
         byte[] data = packet.getData();
         byte[] packetTypeBytes = new byte[4];
         System.arraycopy(data, POS_PACKET_TYPE, packetTypeBytes, 0, 4);
-
         return getInt(packetTypeBytes);
     }
 
     public boolean isCorrupted(){
-        return isCorrupted;
+        return ((checkSum & 0xFF) != (computeChecksum(packetData, 2, packetData.length) & 0xFF));
     }
+
 }
