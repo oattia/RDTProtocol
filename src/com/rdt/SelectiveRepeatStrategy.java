@@ -56,13 +56,11 @@ public class SelectiveRepeatStrategy extends TransmissionStrategy {
 
     @Override
     public long getNextSeqNo() {
-        System.out.println("nextSeq = " + nextSeqNum);
-        System.out.println("base = " + base);
         if(!lostSeqs.isEmpty()) {
             long seqNo = lostSeqs.iterator().next();
             lostSeqs.remove(seqNo);
             return seqNo;
-        } else if(nextSeqNum >= base && nextSeqNum < base + windowSize){
+        } else if(nextSeqNum >= base && nextSeqNum < base+windowSize && nextSeqNum < numOfPackets+initSeqNo){
             return nextSeqNum;
         } else {
             return -1;

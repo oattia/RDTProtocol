@@ -1,5 +1,7 @@
 package com.rdt;
 
+import java.io.*;
+
 public abstract class TransmissionStrategy {
 
     // To check if done ...
@@ -11,8 +13,9 @@ public abstract class TransmissionStrategy {
     protected long base; // first not acked.
     protected long nextSeqNum;
 
-    private int ssthreshold = 20;
+    private int ssthreshold = 10;
     private double cwnd = 0.0;      // used to save info about current window size
+    private int acksToCompleteWindow;
 
     // Invariants:
     // first pkt in window = base
@@ -22,37 +25,53 @@ public abstract class TransmissionStrategy {
     public static final String GO_BACK_N = "GoBackN";
     public static final String SELECTIVE_REPEAT = "SelectiveRepeat";
 
+    private PrintWriter congestionTracingFile;
+
     public TransmissionStrategy(int numOfPackets, long initSeqNo, int initWindowSize) {
         this.numOfPackets = numOfPackets;
         this.initSeqNo = initSeqNo;
         this.windowSize = initWindowSize;
         this.cwnd = (double)initWindowSize;
+        this.acksToCompleteWindow = initWindowSize;
 
         this.nextSeqNum = initSeqNo;
         this.base = initSeqNo;
+
+        try {
+            this.congestionTracingFile = new PrintWriter("CongestionTrace", "UTF-8");
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+
     }
 
     protected void updateWinSize_timeout(){
         this.ssthreshold /= 2;
         this.windowSize /= 2;       // if packet is lost: window size is halved
-        System.out.println("*********------------ "+this.windowSize);
+        this.cwnd = this.windowSize*1.0;
+        this.congestionTracingFile.println(this.windowSize);
+        this.acksToCompleteWindow = this.windowSize;
     }
 
     protected void updateWinSize_ackRecv(){
-        int temp = this.windowSize;
-
         if( this.windowSize >= ssthreshold ) {
             cwnd += 1.0/this.windowSize;
-            System.out.println("-------------- "+cwnd);
-            System.out.println("-------------- "+(int)Math.floor(cwnd));
             this.windowSize = (int)Math.floor(cwnd);
         } else {
             this.windowSize ++;
             this.cwnd ++;
         }
 
-        if(this.windowSize!=temp)
-            System.out.println("********************* "+this.windowSize);
+        if(this.acksToCompleteWindow == 0) {
+            this.acksToCompleteWindow = this.windowSize;
+            this.congestionTracingFile.println(this.cwnd);
+            this.congestionTracingFile.flush();
+        } else {
+            this.acksToCompleteWindow --;
+        }
+
     }
 
     public abstract boolean isDone();
