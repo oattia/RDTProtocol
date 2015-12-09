@@ -31,6 +31,9 @@ public class ConnectionHandler implements Runnable, Subscriber {
     private BlockingQueue<Event> mailbox;
     private Set<Long> acked;
 
+    private int numOfChunx;
+    private int initialSeqNo;
+
     private Random rng;
 
     private double plp;         // packet loss probability: from 0 to 1
@@ -108,10 +111,10 @@ public class ConnectionHandler implements Runnable, Subscriber {
             return false;
         }
 
-        int numOfChunx = (int) Math.ceil(((double)file.length() / (double)CHUNK_SIZE));
+        numOfChunx = (int) Math.ceil(((double)file.length() / (double)CHUNK_SIZE));
         System.out.println("CHUNX: " + numOfChunx);
 
-        int initialSeqNo = 1;
+        initialSeqNo = 1;
 
         if (strategyName == null) {
             throw new IllegalArgumentException();
@@ -134,6 +137,7 @@ public class ConnectionHandler implements Runnable, Subscriber {
     public void run() {
         if(!init()) return;
 
+        long time1 = System.currentTimeMillis();
         int i = 0;
         while (!strategy.isDone() && timeoutInterval <= MAX_PKT_TIMEOUT) {
             long seqNo;
@@ -148,14 +152,13 @@ public class ConnectionHandler implements Runnable, Subscriber {
                 }
                 sendDataPacket(pkt);
                 setTimer(seqNo);
-                System.out.println("SENT " + seqNo);
             }
 
             consumeMailbox();
 
             i++;
 
-            if(i >= 1000) {
+            if(i >= 10000) {
                 TimeoutTimerTask ttt = timeoutMap.get(strategy.getBase());
 
                 System.out.println("\n\nBase: " + strategy.getBase());
@@ -183,6 +186,8 @@ public class ConnectionHandler implements Runnable, Subscriber {
         else if(timeoutInterval >= MAX_PKT_TIMEOUT)
             System.out.println("Max timeout for packet is reached...");
         clean();
+        long time2 = System.currentTimeMillis();
+        System.out.println("Time = " + (time2 - time1) / 1000);
     }
 
     public void kill() {
@@ -228,9 +233,15 @@ public class ConnectionHandler implements Runnable, Subscriber {
                 int bitWithError = rng.nextInt(8 * data.length);
                 data[(bitWithError / 8)] ^= (1 << (bitWithError % 8));
                 pkt.setChunkData(data);
+                System.out.println("Corrupted data in: " + pkt.getSeqNo());
             }
-            if(rng.nextFloat() >= plp)
+
+            if(rng.nextFloat() >= plp) {
                 socket.send(pkt.createDatagramPacket());
+                System.out.println("Sent " + pkt.getSeqNo());
+            } else {
+                System.out.println("Dropped " + pkt.getSeqNo());
+            }
             strategy.sent(pkt.getSeqNo());
         } catch (IOException e){ }
     }
@@ -243,17 +254,14 @@ public class ConnectionHandler implements Runnable, Subscriber {
             } catch (InterruptedException ex) { ex.printStackTrace(); }
 
             if(e instanceof TimeoutEvent) {
-                System.out.println(((TimeoutEvent) e).getSeqNo() + " taken as TimeoutEvent");
                 handleTimeoutEvent((TimeoutEvent) e);
             } else if(e instanceof AckEvent) {
-                System.out.println(((AckEvent) e).getAckNo() + " taken as AckEvent");
                 handleAckEvent((AckEvent) e);
             }
         }
     }
 
     private void handleAckEvent(AckEvent e) {
-        System.out.println("acked: " + e.getAckNo() + "\n");
         long seqNo = e.getAckNo();
 
         if(!timeoutMap.containsKey(seqNo)) // Already seen as a timeout
@@ -272,22 +280,23 @@ public class ConnectionHandler implements Runnable, Subscriber {
             timedoutNotAcked.remove(seqNo);
         }
         strategy.acknowledged(seqNo);
+        System.out.println("Acked: " + e.getAckNo());
     }
 
     private void handleTimeoutEvent(TimeoutEvent e) {
         long seqNo = e.getSeqNo();
 
         if(acked.contains(seqNo) ) {
-            System.out.println("Acked before");
+            System.out.println("Timed out, neglected, Acked before");
             return; // Rescheduled and did not fire again!
         }
 
         if(timeoutMap.get(seqNo).scheduledExecutionTime() > System.currentTimeMillis()){
-            System.out.println("to be executed...");
+            System.out.println("Timed out, neglected, to be executed...");
            return;
         }
 
-        System.out.println("timedout: " + e.getSeqNo());
+        System.out.println("Timed out, waiting for resend: " + e.getSeqNo());
 
         timeoutMap.remove(seqNo);
         timedoutNotAcked.add(seqNo);
@@ -327,18 +336,10 @@ public class ConnectionHandler implements Runnable, Subscriber {
 
     @Override
     public void update(Event e) {
-        if(e instanceof AckEvent) {
+        if(e instanceof AckEvent || e instanceof TimeoutEvent) {
             try {
                 mailbox.put(e);
-                System.out.println(((AckEvent) e).getAckNo() + " put in queue as AckEvent");
-                System.out.println(mailbox.size());
-            } catch (InterruptedException ex) {ex.printStackTrace();}
-        } else if(e instanceof TimeoutEvent){
-            try {
-                mailbox.put(e);
-                System.out.println(((TimeoutEvent) e).getSeqNo() + " put in queue as TimeoutEvent");
-                System.out.println(mailbox.size());
-            } catch (InterruptedException ex) {ex.printStackTrace();}
+            } catch (InterruptedException ex) { ex.printStackTrace(); }
         }
     }
 }

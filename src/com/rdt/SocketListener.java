@@ -54,6 +54,7 @@ public class SocketListener implements Runnable, Publisher {
                 AckPacket pkt = new AckPacket(dtgrm);
 
                 if(pkt.isCorrupted()) { // Leave it to the timeout to handle
+                    System.out.println("Received Corrupted Ack for :" + pkt.getAckNo());
                     continue;
                 }
 

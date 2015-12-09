@@ -8,7 +8,7 @@ public class GoBackNStrategy extends TransmissionStrategy {
 
     @Override
     public boolean isDone() {
-        return base == (numOfPackets + initSeqNo);
+        return base >= (numOfPackets + initSeqNo);
     }
 
     @Override
@@ -19,7 +19,7 @@ public class GoBackNStrategy extends TransmissionStrategy {
 
     @Override
     public void acknowledged(long seqNo) {
-        if(seqNo >= base) {
+        if(seqNo >= base && seqNo < base + windowSize) {
             base = seqNo + 1;  // Cumulative Ack!
         }
     }
@@ -32,7 +32,7 @@ public class GoBackNStrategy extends TransmissionStrategy {
 
     @Override
     public long getNextSeqNo() {
-        if(nextSeqNum >= base && nextSeqNum < base + windowSize){
+        if(nextSeqNum >= base && nextSeqNum < base + windowSize && nextSeqNum < initSeqNo+numOfPackets){
             return nextSeqNum;
         } else {
             return -1;

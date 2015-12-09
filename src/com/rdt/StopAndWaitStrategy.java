@@ -33,7 +33,7 @@ public class StopAndWaitStrategy extends TransmissionStrategy {
 
     @Override
     public long getNextSeqNo() {
-        if(nextSeqNum == base){
+        if(nextSeqNum == base && nextSeqNum < initSeqNo+numOfPackets){
             return nextSeqNum;
         }
         return -1L;
